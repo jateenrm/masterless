@@ -1,96 +1,84 @@
 package main
 
+import "net/http"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
-import "golang.org/x/crypto/bcrypt"
 
-import "net/http"
+type Quote struct {
+quote string 
+category string
+}
 
 var db *sql.DB
 var err error
 
-func signupPage(res http.ResponseWriter, req *http.Request) {
-    if req.Method != "POST" {
-        http.ServeFile(res, req, "signup.html")
-        return
+func InsertQuoteEndpoint(res http.ResponseWriter, req *http.Request) {
+	if req.Method != "POST" {
+        		http.ServeFile(res, req, "insert.html")
+       		return
 	}
 
-	username := req.FormValue("username")
-	password := req.FormValue("password")
+	quote := req.FormValue("quote")
+	category := req.FormValue("category")
 
-	var user string
+	var test string
 
-    err := db.QueryRow("SELECT username FROM users WHERE username=?", username).Scan(&user)
+    err := db.QueryRow("SELECT quote FROM quotation WHERE quote=?", quote).Scan(&test)
 
-    switch {
-    case err == sql.ErrNoRows:
-        hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+switch {
+case err == sql.ErrNoRows:	
+	_, err = db.Exec("INSERT INTO quotation(quote, category) VALUES(?, ?)", quote, category)
         if err != nil {
-            http.Error(res, "Server error, unable to create your account.", 500)    
-            return
-        } 
-
-        _, err = db.Exec("INSERT INTO users(username, password) VALUES(?, ?)", username, hashedPassword)
-        if err != nil {
-            http.Error(res, "Server error, unable to create your account.", 500)    
+            http.Error(res, "Unable to Add Quote to Quotation Table.", 500)    
             return
         }
 
-        res.Write([]byte("User created!"))
+        res.Write([]byte("Quote Added Successfully!"))
         return
-    case err != nil: 
-        http.Error(res, "Server error, unable to create your account.", 500)    
+case err != nil: 
+        http.Error(res, "Server error, unable to process you request.", 500)    
         return
-    default: 
+default: 
         http.Redirect(res, req, "/", 301)
-    }
 }
-	
-func loginPage(res http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		http.ServeFile(res, req, "login.html")
-		return
-	}
-
-	username := req.FormValue("username")
-	password := req.FormValue("password")
-
-	var databaseUsername string
-	var databasePassword string
-
-	err := db.QueryRow("SELECT username, password FROM users WHERE username=?", username).Scan(&databaseUsername, &databasePassword)
-
-	if err != nil {
-		http.Redirect(res, req, "/login", 301)
-		return
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(databasePassword), []byte(password))
-	if err != nil {
-		http.Redirect(res, req, "/login", 301)
-		return
-	}
-		res.Write([]byte("User created!"))
 }
-
+func FetchQuoteEndpoint(res http.ResponseWriter, req *http.Request) {
+var test2 string
+q := `
+SELECT quote FROM quotation;
+ORDER BY RAND()
+LIMIT 1
+`
+err := db.Query((q), quote).Scan(&test2)
+switch {
+case err == sql.ErrNoRows:
+	res.Write([]byte("Quotation:" + test2))
+        return
+case err != nil:
+        http.Error(res, "Server error, unable to process you request.", 500)
+        return
+default:
+        http.Redirect(res, req, "/", 301)
+}
+}
 func homePage(res http.ResponseWriter, req *http.Request) {
 	http.ServeFile(res, req, "index.html")
 }
 
+
 func main() {
 	db, err = sql.Open("mysql", "y2jat:RN6AX7ZG8@tcp(dbjateen.c8h9zfmu5hnn.ap-south-1.rds.amazonaws.com:3306)/mydb?charset=utf8")
-	if err != nil {
+		if err != nil {
 		panic(err.Error())
-	}
+		}
 	defer db.Close()
 
 	err = db.Ping()
 	if err != nil {
 		panic(err.Error())
 	}
-
-	http.HandleFunc("/signup", signupPage)
-	http.HandleFunc("/login", loginPage)
-	http.HandleFunc("/", homePage)
-	http.ListenAndServe(":8080", nil)
+http.HandleFunc("/new", InsertQuoteEndpoint)
+http.HandleFunc("/quote", FetchQuoteEndpoint)
+http.HandleFunc("/", homePage)
+http.ListenAndServe(":8080", nil)
 }
